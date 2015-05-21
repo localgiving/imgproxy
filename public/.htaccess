@@ -1,0 +1,16 @@
+# Turn off index pages
+Options -Indexes
+
+# Assumes mod_rewrite is present
+RewriteEngine on
+
+# Leave the line below alone to insert the referer rules in
+#--HOTLINK--#
+
+# Turns non-alpha characters into underscores for file searching,
+# so PHP isn't launched when the file already exists
+RewriteRule ^(.*)[/:+](.*) $1$2 [L]
+
+# Redirects requests to proxy.php where no file or directory exists
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule .* proxy.php
