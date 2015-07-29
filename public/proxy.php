@@ -115,7 +115,7 @@ class ImageProxy {
 }
 
 // set include for phpThumb
-require_once('/var/www/phpthumb.class.php');
+require_once(dirname(dirname(__FILE__)) . '/phpthumb.class.php');
 
 // get whole request, minus the opening slash
 $request = substr($_SERVER['REQUEST_URI'], 1);
