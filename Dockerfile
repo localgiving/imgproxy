@@ -46,6 +46,9 @@ RUN chmod +x /opt/startup.sh
 ADD init.sh /opt/init.sh
 RUN chmod +x /opt/init.sh
 
+# Get AWS / S3 stuff
+ADD https://github.com/aws/aws-sdk-php/releases/download/2.8.16/aws.phar /var/www/html/
+
 # Remove in production
 RUN apt-get -y install vim
 
