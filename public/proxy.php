@@ -3,7 +3,7 @@
  * Proxy.php takes in image URLs, fetches them, and resizes
  */
 class ImageProxy {
-    public $url, $optionString;
+    public $url, $originalUrl, $optionString;
     protected $tmpFile, $phpThumb;
 
     /**
@@ -16,6 +16,8 @@ class ImageProxy {
      */
     public function serve($url, $options) {
         $this->url              = $url;
+        $this->originalUrl      = $url;
+
         $this->optionString     = $options;
 
         // list through functions
@@ -30,6 +32,19 @@ class ImageProxy {
      */
     protected function _checkSchema() {
         $scheme = parse_url($this->url, PHP_URL_SCHEME);
+
+        // if no schema is specified, it can then look in certain specified
+        // domains in "translate-domains.ini" and swap them for matching domains
+        if(is_null($scheme)) {
+            if($opts = parse_ini_file(dirname(dirname(__FILE__)) . '/translate-domains.ini')) {
+                $parts = explode('/', $this->url);
+                if(isset($opts[$parts[0]])) {
+                    $this->url = $opts[$parts[0]] . implode('/', array_slice($parts, 1));
+                }
+            }
+            $scheme = parse_url($this->url, PHP_URL_SCHEME);
+        }
+
         switch($scheme) {
             case 'http': case 'https': break;
             default:
@@ -107,7 +122,7 @@ class ImageProxy {
      */
     protected function _createFile() {
         $this->phpThumb->GenerateThumbnail();
-        $newFileName = str_replace(array('/', ':'), '', $this->optionString . $this->url);
+        $newFileName = str_replace(array('/', ':'), '', $this->optionString . $this->originalUrl);
         $this->phpThumb->RenderToFile(dirname(__FILE__) . '/' . $newFileName);
         $this->phpThumb->OutputThumbnail();
         unlink($this->tmpFile);
