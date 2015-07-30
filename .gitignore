@@ -1,4 +1,4 @@
 resources/*
-.idea/
 .idea/*
 phpThumb*
+*.ini
