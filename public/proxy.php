@@ -36,11 +36,8 @@ class ImageProxy {
         // if no schema is specified, it can then look in certain specified
         // domains in "translate-domains.ini" and swap them for matching domains
         if(is_null($scheme)) {
-            if($opts = parse_ini_file(dirname(dirname(__FILE__)) . '/translate-domains.ini')) {
-                $parts = explode('/', $this->url);
-                if(isset($opts[$parts[0]])) {
-                    $this->url = $opts[$parts[0]] . implode('/', array_slice($parts, 1));
-                }
+            if($opts = parse_ini_file(dirname(dirname(__FILE__)) . '/translate-domains.ini', true)) {
+                $this->_getFromAlternateDomain($opts);
             }
             $scheme = parse_url($this->url, PHP_URL_SCHEME);
         }
@@ -49,6 +46,86 @@ class ImageProxy {
             case 'http': case 'https': break;
             default:
                 throw new Exception('Schema not allowed');
+        }
+    }
+
+    /**
+     * Get from alternate domain looks in alternate domains and translates them into proper ones
+     * 
+     * If it can't find the resource at the alternate domain, it then looks in S3 / uploads to S3 as necessary
+     * 
+     * @param array $opts - should be of the format:
+     *      [shortdomain] => 'https://example.com/actual/full/path/
+     *      [shortdomain.s3] => [ key => 'AWSKEY', secret => 'AWSSECRET', bucket => 'AWSBUCKET' ] 
+     */
+    protected function _getFromAlternateDomain(array $opts) {
+        $parts = explode('/', $this->url);
+        if(isset($opts[$parts[0]])) {
+            $this->url = $opts[$parts[0]] . implode('/', array_slice($parts, 1));
+            try {
+                $s3ArrayKey = $parts[0] . '.s3';
+                if (isset($opts[$s3ArrayKey])) {
+                    // we're gonna need some S3
+                    include dirname(dirname(__FILE__)) . '/aws.phar';
+                    $client = \Aws\S3\S3Client::factory(array(
+                        'credentials' => array(
+                            'key' => $opts[$s3ArrayKey]['key'],
+                            'secret' => $opts[$s3ArrayKey]['secret'],
+                        ),
+                        'region' => 'eu-west-1'
+                    ));
+
+                    // check for 404
+                    if ($this->_is404($this->url)) {
+                        $signedUrl = $client->getObjectUrl(
+                            $opts[$s3ArrayKey]['bucket'],
+                            $this->originalUrl,
+                            '+2 minutes');
+                        $this->url = $signedUrl;
+
+                    } else {
+                        $this->_copyToTmp();
+                        // send to S3
+                        $uploader = \Aws\S3\Model\MultipartUpload\UploadBuilder::newInstance()
+                            ->setClient($client)
+                            ->setSource($this->tmpFile)
+                            ->setKey($opts[$s3ArrayKey]['key'])
+                            ->setBucket($opts[$s3ArrayKey]['bucket'])
+                            ->setKey($this->originalUrl)
+                            ->build();
+                        $uploader->upload();
+                    }
+                }
+            } catch(Exception $e) {
+                echo 'Could not upload';
+                die;
+            }
+        }
+    }
+
+    
+    /** 
+     * Checks to see if a URL 404's 
+     */
+    protected function _is404($url) {
+        try {
+            $handle = curl_init($url);
+            curl_setopt($handle, CURLOPT_RETURNTRANSFER, TRUE);
+            curl_setopt($handle, CURLOPT_NOBODY, true);
+
+            /* Get the HTML or whatever is linked in $url. */
+            $response = curl_exec($handle);
+
+            /* Check for 404 (file not found). */
+            $httpCode = curl_getinfo($handle, CURLINFO_HTTP_CODE);
+            if ($httpCode == 404) {
+                return true;
+            }
+
+            curl_close($handle);
+            return false;
+        } catch(Exception $e) {
+            var_dump($e);die;
         }
     }
 
